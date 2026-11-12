@@ -12,13 +12,13 @@ static inline uint32_t xorshift32(uint32_t *s)
 
 static void id_pool_init_shuffled(t_id_pool *p, uint32_t seed)
 {
-    p->top = UINT16_MAX;
-    for (uint32_t i = 0; i < UINT16_MAX; ++i)
+    p->top = UINT16_MAX + 1u;
+    for (uint32_t i = 0; i <= UINT16_MAX; ++i)
         p->stack[i] = (uint16_t)i;
 
     // Fisher–Yates
     uint32_t rng = seed ? seed : 0x12345678u;
-    for (uint32_t i = UINT16_MAX - 1; i > 0; --i)
+    for (uint32_t i = UINT16_MAX; i > 0; --i)
     {
         uint32_t j = xorshift32(&rng) % (i + 1);
         uint16_t tmp = p->stack[i];
@@ -29,7 +29,7 @@ static void id_pool_init_shuffled(t_id_pool *p, uint32_t seed)
 
 void id_pool_init(t_id_pool *p)
 {
-    memset(p->id_arr, 0, sizeof(*p->id_arr) * UINT16_MAX);
+    memset(p->id_arr, 0, sizeof(p->id_arr));
     // to randomize id
     id_pool_init_shuffled(p, time(NULL));
 }

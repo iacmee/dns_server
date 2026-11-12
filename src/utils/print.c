@@ -14,6 +14,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <ctype.h>
+#include <arpa/inet.h>
 
 /* -------------------- helpers: endian-safe reads -------------------- */
 
@@ -535,4 +536,15 @@ void dns_print_message(const void *data, size_t len, FILE *out) {
     }
 
     /* dig usually prints timing, server, etc. We can’t from raw packet alone. */
+}
+
+const char *ipv4_to_string(uint32_t address)
+{
+    static _Thread_local char buffer[INET_ADDRSTRLEN];
+    struct in_addr ipv4_address;
+
+    ipv4_address.s_addr = address;
+    if (inet_ntop(AF_INET, &ipv4_address, buffer, sizeof(buffer)) == NULL)
+        return ("invalid IPv4");
+    return (buffer);
 }

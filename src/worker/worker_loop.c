@@ -4,9 +4,9 @@ void worker_loop(t_worker *worker)
 {
     struct epoll_event events[MAX_EPOLL_EVENT];
 
-    while (1)
+    while (server_running)
     {
-        int n_event = epoll_wait(worker->epfd, events, MAX_EPOLL_EVENT, -1);
+        int n_event = epoll_wait(worker->epfd, events, MAX_EPOLL_EVENT, 250);
         if (n_event < 0)
         {
             if (errno == EINTR)

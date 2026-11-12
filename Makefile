@@ -1,63 +1,46 @@
-NAME = main
-
-CC = gcc
-CFLAGS = -Wall -Wextra -Werror -g -flto -O0
-
-SRC_DIR = src/
-INCLUDES = include/
-OBJ_DIR = obj/
-
-
-SRC = $(wildcard $(SRC_DIR)*.c)
-SRC = $(shell find $(SRC_DIR) -type f -name "*.c")
-
-OBJ = $(SRC:.c=.o)
-OBJ := $(patsubst $(SRC_DIR)%,$(OBJ_DIR)%, $(OBJ))
-
-BBLK = \e[1;30m
-BRED = \e[1;31m
-BGRN = \e[1;92m
-BYEL = \e[1;33m
-BBLU = \e[1;34m
-BMAG = \e[1;35m
-BCYN = \e[1;36m
-BWHT = \e[1;37m
-CRESET = \e[0m
+NAME := main
+CC := cc
+CPPFLAGS += -Iinclude $(shell pkg-config --cflags ldns)
+CFLAGS ?= -O2 -g
+CFLAGS += -std=c11 -Wall -Wextra -Werror -MMD -MP
+LDLIBS += $(shell pkg-config --libs ldns) -pthread
+SRC := src/main.c src/handle_upstream_response.c \
+       src/worker/handle_client_queries.c src/worker/parse_queries.c \
+       src/worker/worker_loop.c src/worker/handle_timer.c \
+       src/worker/handle_expired_context.c src/Hierarchical_Timing_Wheel/htw.c \
+       src/utils/utils.c src/utils/id_pool.c src/utils/ctx_poll.c \
+       src/utils/print.c src/logger/logger.c
+OBJ := $(patsubst src/%.c,obj/%.o,$(SRC))
 
 all: $(NAME)
 
-setcap:
-	@echo "$(BMAG)Setting cap_net_bind_service$(NAME)$(CRESET)"
-	@sudo setcap 'cap_net_bind_service=+ep' $(NAME)
+$(NAME): $(OBJ)
+	$(CC) $(LDFLAGS) $(OBJ) $(LDLIBS) -o $@
 
-$(NAME): $(OBJ) 
-	@printf "\r\e[K"
-	@echo "$(BBLU)Compiling $(NAME)$(CRESET)"
-	@$(CC) -I$(INCLUDES) $(OBJ) $(CFLAGS) -o $(NAME)
-	@echo "$(BBLU)$(NAME) compiled!$(CRESET)"
-	
-$(OBJ_DIR)%.o: $(SRC_DIR)%.c
-	@printf "\r\e[K$(BGRN)Compiling: %s$(CRESET)" "$<"
-	@mkdir -p $(OBJ_DIR)
+obj/%.o: src/%.c
 	@mkdir -p $(dir $@)
-	@${CC} $(CFLAGS) -c $< -o $@ -I$(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 clean:
-	@rm -rf $(OBJ_DIR)
-	@echo "$(BRED)object files cleaned!$(CRESET)"
+	$(RM) -r obj
 
 fclean: clean
-	@rm -f $(NAME)
-	@echo "$(BRED)$(NAME) cleaned!$(CRESET)"
-	@echo ""
+	$(RM) $(NAME)
 
-re: fclean all
+re:
+	$(MAKE) fclean
+	$(MAKE) all
 
 run r: all
-	@echo "$(BGRN)Running $(NAME)$(CRESET)"
 	./$(NAME)
-	@echo "$(BGRN)$(NAME) done!$(CRESET)"
 
-rerun: re run
+obj/test-timing-wheel: tests/timing_wheel.c src/Hierarchical_Timing_Wheel/htw.c include/timing_wheel.h
+	@mkdir -p obj
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/timing_wheel.c src/Hierarchical_Timing_Wheel/htw.c -o $@
 
-.PHONY : all clean fclean re run
+test: all obj/test-timing-wheel
+	./obj/test-timing-wheel
+	python3 tests/smoke.py
+
+-include $(OBJ:.o=.d)
+.PHONY: all clean fclean re run r test

@@ -1,0 +1,10 @@
+/obj/
+/main
+/a.out
+*.o
+*.d
+/.vscode/
+/askpass.sh
+.env
+.env.*
+__pycache__/

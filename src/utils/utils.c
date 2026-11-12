@@ -17,11 +17,11 @@ int make_udp_socket_client(uint16_t port)
     int flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 
-    struct sockaddr_in6 addr;
+    struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
-    addr.sin6_family = AF_INET;
-    addr.sin6_addr = in6addr_any;
-    addr.sin6_port = htons(port);
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(port);
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
     {
@@ -52,6 +52,8 @@ bool dns_read_name(const uint8_t *msg, size_t msg_len, ssize_t *offset,
 
     while (1)
     {
+        if (pos >= msg_len)
+            return false;
         const uint8_t b = msg[pos];
 
         // end of name
@@ -61,6 +63,8 @@ bool dns_read_name(const uint8_t *msg, size_t msg_len, ssize_t *offset,
         // compression pointer
         if ((b & 0xC0) == 0xC0)
         {
+            if (pos + 1 >= msg_len)
+                return false;
             if (!jumped)
                 *offset = pos + 2;
             uint16_t ptr = (uint16_t)(((b & 0x3F) << 8) | msg[pos + 1]);

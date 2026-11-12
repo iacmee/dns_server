@@ -1,4 +1,4 @@
-#include "include/dns.h"
+#include "dns.h"
 
 size_t dns_write_qname(uint8_t *buf, const char *domain);
 

@@ -1,5 +1,8 @@
+#pragma once
 #define _GNU_SOURCE // for sched.h and cpu affinity
 #include <stdio.h>
+#include <arpa/inet.h>
+#include <signal.h>
 #include <pthread.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -16,12 +19,14 @@
 #include <stdbool.h>
 #include <sys/timerfd.h>
 #include <stdalign.h>
+#include <ldns/ldns.h>
 
 #include "timing_wheel.h"
+#include "logger.h"
 
 #define DNS_PORT 53
 #define MAX_EPOLL_EVENT (8192 / sizeof(struct epoll_event)) // 1024 richieste massime
-#define QUERIES_BUFFER 4096                                 // 4 KB
+#define QUERIES_BUFFER 4096UL                                 // 4 KB
 #define MINUMUM_HEADER_SIZE 12
 #define MAX_QNAME_LEN 256
 #define MAX_CTX 8192
@@ -29,7 +34,15 @@
 #define MAX_LABLE_LEN 63
 #define MAX_LEN_IP_TO_TRY 1 
 #define FORMERR_BLUEPRINT_SIZE sizeof(t_dns)
-#define MAX_TICK_WAIT 40 // 400 ms
+#define MAX_TICK_WAIT 200 // 2 seconds
+
+#define RETURN_ON_ERROR(expression)       \
+    do                                    \
+    {                                     \
+        int _error_code = (expression);    \
+        if (_error_code != 0)              \
+            return (_error_code);          \
+    } while (0)
 
 #define IP_AROOT 0xC6290004 // 198.41.0.4
 /*
@@ -128,6 +141,8 @@ typedef enum
 typedef struct s_query_context
 {
     t_htw_timer timer;
+    struct s_worker *worker;
+    uint16_t upstream_id;
 
     char qname[MAX_QNAME_LEN];
     uint16_t qtype;
@@ -161,13 +176,14 @@ typedef struct s_ctx_poll
 
 typedef struct
 {
-    t_query_context *id_arr[UINT16_MAX];
-    uint16_t stack[UINT16_MAX];
+    t_query_context *id_arr[UINT16_MAX + 1u];
+    uint16_t stack[UINT16_MAX + 1u];
     uint32_t top; // numero di elementi disponibili
 } t_id_pool;
 
 typedef struct s_worker
 {
+    struct sockaddr_in upstream_addr;
     int core_id;       // num of cpu will bind
     int epfd;          // epoll file descriptor
     int client_sock;   // socket bind with port 53;
@@ -197,6 +213,7 @@ void worker_loop(t_worker *worker);
 void handle_client_queries(t_worker *worker);
 void handle_upstream_response(t_worker *worker);
 void dns_print_message(const void *data, size_t len, FILE *out);
+const char *ipv4_to_string(uint32_t address);
 
 int64_t timespec_to_ms(const struct timespec *ts);
 int64_t get_time_ms(void);
@@ -225,3 +242,6 @@ bool skip_name(unsigned char buf[QUERIES_BUFFER], ssize_t byte_read, ssize_t *po
 
 // tmp things
 #define NCPU 1
+extern volatile sig_atomic_t server_running;
+int parse_queries(t_worker *worker, int fd);
+void release_query(t_query_context *context);

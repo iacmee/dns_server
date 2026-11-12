@@ -162,115 +162,37 @@ void htw_cascade_bucket(t_htw *w, uint8_t level, uint8_t slot)
         t->active = 0;
 
         // reinsert based on current now and its expiry
-        htw_add(w, t, t->expiry_tick, t->cb, t->arg);
+        htw_add(w, t, t->expiry_tick > w->now_tick
+            ? t->expiry_tick - w->now_tick : 0, t->cb, t->arg);
     }
 }
 
-// ---------------- tick/run ----------------
-
-// Process current tick:
-// - advance now_tick
-// - run L0 bucket for this tick
-// - cascade higher levels when lower wraps
-#include "stdio.h"
+/* Cascade higher levels first, before processing the current lowest bucket. */
 void htw_advance(t_htw *w, uint64_t ticks)
 {
     while (ticks--)
     {
-        w->now_tick++;
-
-        const uint64_t now = w->now_tick;
-
-        // 1) run timers in L0 bucket for "now"
-#if ((HTW_SIZE & HTW_MASK) == 0u)
-        uint8_t slot0 = (uint8_t)(now & HTW_MASK);
-#else
-        // floor(expiry_tick / (HTW_SIZE^level)) % HTW_SIZE
-        uint8_t slot0 = (uint8_t)(now % HTW_SIZE);
-#endif
-
-        t_htw_timer *head = w->slots[0][slot0];
-        w->slots[0][slot0] = NULL;
-
+        ++w->now_tick;
+        for (unsigned level = HTW_LEVELS - 1; level > 0; --level)
+        {
+            uint64_t divisor = 1;
+            for (unsigned i = 0; i < level; ++i)
+                divisor *= HTW_SIZE;
+            if (w->now_tick % divisor == 0)
+                htw_cascade_bucket(w, (uint8_t)level,
+                    htw_slot_for(w->now_tick, (uint8_t)level));
+        }
+        uint8_t slot = htw_slot_for(w->now_tick, 0);
+        t_htw_timer *head = w->slots[0][slot];
+        w->slots[0][slot] = NULL;
         while (head)
         {
-            t_htw_timer *t = head;
+            t_htw_timer *timer = head;
             head = head->next;
-
-            t->prev = t->next = NULL;
-            t->active = 0;
-
-            // Normally expiry_tick <= now here.
-            // If quantization or reinsert happens, check and re-add if not due yet.
-            // if (t->expiry_tick > now)
-            // {
-            //     htw_add(w, t, t->expiry_tick, t->cb, t->arg);
-            //     continue;
-            // }
-            t->cb(t->arg);
+            timer->prev = timer->next = NULL;
+            timer->active = 0;
+            timer->cb(timer->arg);
         }
-
-        // 2) cascading conditions
-        // If lower wheel wrapped, cascade one bucket from next level.
-        // Wrap points:
-        // - every 256 ticks, cascade L1
-        // - every 256^2 ticks, cascade L2
-        // - every 256^3 ticks, cascade L3
-#if (HTW_LEVELS == 4) && (HTW_SIZE == 256u)
-        if (slot0 == 0)
-        {
-            uint8_t slot1 = (uint8_t)((now >> 8) & HTW_MASK);
-            htw_cascade_bucket(w, 1, slot1);
-
-            if ((slot1 == 0))
-            {
-                uint8_t slot2 = (uint8_t)((now >> 16) & HTW_MASK);
-                htw_cascade_bucket(w, 2, slot2);
-
-                if ((slot2 == 0))
-                {
-                    uint8_t slot3 = (uint8_t)((now >> 24) & HTW_MASK);
-                    htw_cascade_bucket(w, 3, slot3);
-                }
-            }
-        }
-
-#elif ((HTW_SIZE & HTW_MASK) == 0u)
-        const unsigned k = (unsigned)__builtin_ctz((unsigned)HTW_SIZE); // log2(HTW_SIZE)
-        uint8_t cur_slot = slot0;
-        for (unsigned i = 0; i < HTW_LEVELS - 1; ++i)
-        {
-            if (cur_slot = != 0)
-                break;
-
-            cur_slot = (uint8_t)((now >> (k * (i + 1))) & HTW_MASK);
-            htw_cascade_bucket(w, i + 1, cur_slot);
-        }
-#else
-        uint8_t cur_slot = slot0;
-        for (unsigned i = 0; i < (unsigned)HTW_LEVELS - 1u; ++i)
-        {
-            if (cur_slot != 0)
-                break;
-
-            // compute div = HTW_SIZE^(i+1) using integers
-            uint64_t div = 1;
-            for (unsigned j = 0; j < i + 1u; ++j)
-            {
-                // overflow-safe multiply: if div would overflow, clamp to UINT64_MAX
-                if (div > UINT64_MAX / (uint64_t)HTW_SIZE)
-                {
-                    div = UINT64_MAX;
-                    break;
-                }
-                div *= (uint64_t)HTW_SIZE;
-            }
-
-            // slot at level (i+1): floor(now / HTW_SIZE^(i+1)) % HTW_SIZE
-            cur_slot = (uint8_t)((now / div) % (uint64_t)HTW_SIZE);
-            htw_cascade_bucket(w, (uint8_t)(i + 1u), cur_slot);
-        }
-#endif
     }
 }
 
