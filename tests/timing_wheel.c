@@ -27,6 +27,6 @@ int main(void)
     htw_del(&wheel, &timer);
     htw_advance(&wheel, 300);
     assert(calls == 2);
-    
+
     return (0);
 }
