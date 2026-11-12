@@ -27,7 +27,7 @@ ssize_t read_and_verify_response(t_worker *worker, unsigned char buf[QUERIES_BUF
     if (context == NULL)
         return (-1);
 
-    // verify that i recive a packet from the same ip:port i sent
+    // Verify that the packet comes from the IP address and port queried
     int i;
     for (i = 0; i < context->ua_count; ++i)
         if (memcmp(&origin_addr, context->up_addrs + i, sizeof(origin_addr)) == 0)
@@ -39,8 +39,8 @@ ssize_t read_and_verify_response(t_worker *worker, unsigned char buf[QUERIES_BUF
     if (DNS_IS_QUERY(header->flags) || DNS_GET_OPCODE(header->flags) != DNS_OPCODE_QUERY)
         return (-1);
 
-    // verify that has the same questions
-    // ora come ora confronta anche il padding quindi è un po' una merda
+    // Verify that the question matches
+    // TODO: this comparison also includes padding and needs to be fixed
     if (header->qdcount != 1 || memcmp(context->qname, &buf[sizeof(*header)], context->qname_len) != 0)
         return (-1);
 
@@ -55,7 +55,7 @@ ssize_t read_and_verify_response(t_worker *worker, unsigned char buf[QUERIES_BUF
         return (-1);
 
     *ct = context;
-    // TMP DEVO GESTIRE IL RETURN CODE
+    // TODO: handle the response code
     if (DNS_GET_RCODE(header->flags) != DNS_RCODE_NOERROR)
     {
         perror("cosa non gestita attualmente");
@@ -76,38 +76,38 @@ void handle_upstream_response(t_worker *worker)
     t_dns *header = (t_dns *)buf;
     ssize_t pos = sizeof(*header) + context->qname_len + 4;
 
-    // ho la risposta effettiva e la devo "solo" inviare
+    // The answer is available and must be sent to the client
     if (header->ancount != 0 || context->is_recursive == false)
     {
-        // devo verificare il contenuto della risposta e inviarla
+        // Validate the response contents and send it
         /**
-         * in particolare devo verificare che:
-         * -sia formattata bene
-         * -sia < 512 byte (ancora non supporto edns)
+         * In particular, verify that:
+         * - The response is well formed
+         * - It is smaller than 512 bytes (EDNS is not supported yet)
          */
 
         if (context->query_ref != NULL)
         {
-            // questa query mi seviva per un'altro contex
+            // This query was needed by another context
             /**
-             * devo prendere gli ip dalle risposte e metterli dentro gli up_addr
-             * -eliminare il contex corrente e "risvegliare quello vecchio"
+             * Extract IP addresses from the answers and store them in up_addrs
+             * - Remove the current context and resume the previous one
              */
-            // pos sta gia dopo la question section
+            // pos already points past the question section
             t_query_context *old_context = context->query_ref;
 
             int ua_count = 0;
             for (int i = 0; i < header->arcount; ++i)
             {
                 skip_name(buf, byte_read, &pos);
-                if (buf[pos] == 0 && buf[pos + 1] == 1 && buf[pos + 8] == 0 && buf[pos + 9] == 4) // è type A (ipv4)
+                if (buf[pos] == 0 && buf[pos + 1] == 1 && buf[pos + 8] == 0 && buf[pos + 9] == 4) // Type A (IPv4)
                 {
                     memset(&old_context->up_addrs[ua_count], 0, sizeof(struct sockaddr_in));
                     memcpy(&old_context->up_addrs[ua_count].sin_addr.s_addr, buf + pos + 10, 4);
 
                     ++ua_count;
                 }
-                // skippo alla prossima entry
+                // Skip to the next entry
                 pos += 8;
                 pos += (uint16_t)((buf[pos] << 8) | buf[pos + 1]) + 2;
             }
@@ -118,19 +118,19 @@ void handle_upstream_response(t_worker *worker)
             goto send;
         }
 
-        // aggiusto la flag
+        // Adjust the flags
         DNS_CLR_FLAG(header->flags, DNS_FLAG_AA);
-        DNS_CLR_FLAG(header->flags, DNS_FLAG_TC); // ATTENZIONE QUA DEVO VEDERE LE COSE PRIMA
+        DNS_CLR_FLAG(header->flags, DNS_FLAG_TC); // TODO: validate the response before changing this flag
         if (context->is_recursive == true   )
             DNS_SET_FLAG(header->flags, DNS_FLAG_RD);
         DNS_SET_FLAG(header->flags, DNS_FLAG_RA);
-        DNS_SET_RCODE(header->flags, DNS_RCODE_NOERROR); // ATTENZIONE QUA DEVO VEDERE COSE PRIMA
+        DNS_SET_RCODE(header->flags, DNS_RCODE_NOERROR); // TODO: validate the response before setting the response code
         header->id = context->query_id;
         hton_dns_header(header);
 
         if (sendto(worker->client_sock, buf, byte_read, 0, (struct sockaddr *)&context->origin_addr, context->oa_len) < 0)
         {
-            // Devo gestire questo caso non so bene come
+            // TODO: determine how to handle this error
             perror("sendto");
             _exit(1);
         }
@@ -144,9 +144,9 @@ void handle_upstream_response(t_worker *worker)
     }
 
     /**
-    * -scorro tutte le ns
+    * - Iterate over all name servers
     */
-    // tutto questo inevitabilmente cambierà quando ci andrò ad aggiungere la cache
+    // This logic will change when caching is added
     unsigned char nss[MAX_LEN_IP_TO_TRY][MAX_QNAME_LEN];
     for (int i = 0; i < header->nscount; ++i)
     {
@@ -186,8 +186,8 @@ void handle_upstream_response(t_worker *worker)
     if (header->arcount <= 1)
     {
         /**
-         * -disarmo il timer, tolgo dagli id occupati
-         * -creo nuovo context
+         * - Disarm the timer and release the occupied ID
+         * - Create a new context
          *
          */
 
@@ -239,19 +239,19 @@ void handle_upstream_response(t_worker *worker)
         return ;
     }
 
-    /* adesso sono sulle addictional */
+    /* Now processing the additional section */
     int ua_count = 0;
 
     for (int i = 0; i < header->arcount; ++i)
     {
-        // prendo il primo nome
+        // Read the first name
         unsigned char name_server[MAX_QNAME_LEN];
         if (!dns_read_name(buf, byte_read, &pos, name_server, MAX_QNAME_LEN))
         {
             send_servfail(worker, buf, context);
             return ;
         }
-        if (buf[pos] == 0 && buf[pos + 1] == 1 && buf[pos + 8] == 0 && buf[pos + 9] == 4) // è type A (ipv4)
+        if (buf[pos] == 0 && buf[pos + 1] == 1 && buf[pos + 8] == 0 && buf[pos + 9] == 4) // Type A (IPv4)
         {
             if (ua_count < MAX_LEN_IP_TO_TRY)
             {
@@ -262,14 +262,14 @@ void handle_upstream_response(t_worker *worker)
                 ++ua_count;
             }
         }
-        // skippo alla prossima entry
+        // Skip to the next entry
         pos += 8;
         pos += (uint16_t)((buf[pos] << 8) | buf[pos + 1]) + 2;
     }
 
 
 
-    // preparazione della risposta
+    // Prepare the response
     worker->id_pool.id_arr[header->id] = NULL;
     id_pool_free(&worker->id_pool, header->id);
 send:
@@ -279,7 +279,7 @@ send:
     header->nscount = 0;
     if (id_pool_alloc(&worker->id_pool, &header->id))
     {
-        // dovrei rispondere con serv_fail
+        // TODO: respond with SERVFAIL
         printf("wegfewgwe\n");
         _exit(1);
     }
@@ -290,7 +290,7 @@ send:
     context->try = 0;
     context->ua_count = ua_count;
 
-    // adesso rendiamo pos la lungheza della fine della questions section
+    // Set pos to the end of the question section
     pos = sizeof(*header) + context->qname_len + 4;
 
     for (int i = 0; i < ua_count; ++i)
@@ -304,43 +304,43 @@ send:
     return ;
 
     // int pos = sizeof(t_dns) + context->qname_len + 4;
-    // // adesso pos sta nelle answare sections
-    // // se ci sono solo nscount allora devo aprire un'altro context che poi fa capo a questo
-    // // invece se ci sono and
+    // // pos now points to the answer section
+    // // If there are only authority records, create a child context linked to this one
+    // // TODO: handle answer records
     // if (header->arcount == 0)
     // {
-    //     // qua devo aprire un'altro context
+    //     // Create another context here
     //     printf("abudabi\n");
     //     _exit(1);
     // }
 
-    // // faccio una cosa brutto, skippo le autorative risposte e vado direttamente alle addictional records per prendere gli ip
+    // // Temporary approach: skip authority records and read IP addresses from additional records
     // while (header->nscount--)
     // {
     //     /* skip NAME */
     //     while (pos < byte_read)
     //     {
-    //         if (buf[pos] == 0) { pos += 1; break; }          // fine nome
-    //         if ((buf[pos] & 0xC0) == 0xC0) { pos += 2; break; } // pointer compresso
-    //         pos += buf[pos] + 1;                     // label normale
+    //         if (buf[pos] == 0) { pos += 1; break; }          // End of name
+    //         if ((buf[pos] & 0xC0) == 0xC0) { pos += 2; break; } // Compression pointer
+    //         pos += buf[pos] + 1;                     // Uncompressed label
     //     }
 
-    //     if (pos + 10 > byte_read) { printf("errore\n"); _exit(1); }
+    //     if (pos + 10 > byte_read) { printf("error\n"); _exit(1); }
 
     //     /* skip fixed RR fields + RDATA */
     //     uint16_t rdlen = (uint16_t)((buf[pos + 8] << 8) | buf[pos + 9]);
     //     pos += 10 + rdlen;
 
-    //     if (pos > byte_read) { printf("errore\n"); _exit(1); }
+    //     if (pos > byte_read) { printf("error\n"); _exit(1); }
     // }
-    // // adesso sono sulle addictional section, prendo il primo ip e mando la richiesta ahahaha
-    // // come prima cosa skippo il nome
+    // // At the additional section, take the first IP address and send the request
+    // // First skip the name
     // /* skip NAME */
     // while (pos < byte_read)
     // {
-    //     if (buf[pos] == 0) { pos += 1; break; }          // fine nome
-    //     if ((buf[pos] & 0xC0) == 0xC0) { pos += 2; break; } // pointer compresso
-    //     pos += buf[pos] + 1;                     // label normale
+    //     if (buf[pos] == 0) { pos += 1; break; }          // End of name
+    //     if ((buf[pos] & 0xC0) == 0xC0) { pos += 2; break; } // Compression pointer
+    //     pos += buf[pos] + 1;                     // Uncompressed label
     // }
     // printf("AAAAAAAAAAAAAAAAAAAAAAAAAAAA : %x, %x\n", buf[pos], buf[pos + 1]);
 
@@ -353,23 +353,23 @@ send:
     //     /* skip NAME */
     //     while (pos < byte_read)
     //     {
-    //         if (buf[pos] == 0) { pos += 1; break; }          // fine nome
-    //         if ((buf[pos] & 0xC0) == 0xC0) { pos += 2; break; } // pointer compresso
-    //         pos += buf[pos] + 1;                     // label normale
+    //         if (buf[pos] == 0) { pos += 1; break; }          // End of name
+    //         if ((buf[pos] & 0xC0) == 0xC0) { pos += 2; break; } // Compression pointer
+    //         pos += buf[pos] + 1;                     // Uncompressed label
     //     }
     // }
     // // if (!(buf[pos] == 0 && buf[pos + 1] == 1))
     // // {
-    // //     printf("sono entrato\n ");
+    // //     printf("entered branch\n ");
     // //     pos += buf[pos + 6] + 7;
     // //     while (pos < byte_read)
     // //     {
-    // //         if (buf[pos] == 0) { pos += 1; break; }          // fine nome
-    // //         if ((buf[pos] & 0xC0) == 0xC0) { pos += 2; break; } // pointer compresso
-    // //         pos += buf[pos] + 1;                     // label normale
+    // //         if (buf[pos] == 0) { pos += 1; break; }          // End of name
+    // //         if ((buf[pos] & 0xC0) == 0xC0) { pos += 2; break; } // Compression pointer
+    // //         pos += buf[pos] + 1;                     // Uncompressed label
     // //     }
     // // }
-    // pos += 10; // e dovrei essere all'ip
+    // pos += 10; // pos should now point to the IP address
     // header->ancount = 0;
     // header->arcount = 0;
     // header->qdcount = htons(1);
@@ -382,7 +382,7 @@ send:
     // }
     // worker->id_pool.id_arr[header->id] = context;
     // header->id = htons(header->id);
-    // printf("messo il context dentro %x\n", header->id);
+    // printf("stored context under ID %x\n", header->id);
     // header->flags = UPSTREAM_FLAG;
 
 
@@ -391,14 +391,14 @@ send:
     // dst.sin_family = AF_INET;
     // dst.sin_port = htons(DNS_PORT);
     // dst.sin_addr.s_addr = *(uint32_t *)(buf + pos);
-    // // adesso rendiamo pos la lungheza della fine della questions section
+    // // Set pos to the end of the question section
     // pos = sizeof(*header) + context->qname_len + 4;
     // sendto(worker->upstream_sock, buf, pos, 0, (struct sockaddr *)&dst, sizeof(dst));
 }
 
 void send_servfail(t_worker *worker, unsigned char buf[QUERIES_BUFFER], t_query_context *context)
 {
-    // se tutte le query che ho inviato non mi hanno risposto mando un serverror
+    // Send SERVFAIL if none of the upstream requests produced an answer
 
     if (++context->try < context->ua_count)
         return ;

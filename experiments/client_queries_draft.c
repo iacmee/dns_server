@@ -4,7 +4,7 @@ int parse_queries(t_worker *worker, int fd);
 
 void handle_client_queries(t_worker *worker)
 {
-    // devo leggere e decifrare
+    // Read and parse the query
 
     parse_queries(worker, worker->client_sock);
     return ;
@@ -26,7 +26,7 @@ void handle_client_queries(t_worker *worker)
 
     // dns_print_message(buf, sizeof(buf), stdout);
 
-    // verifiche
+    // Validation
     t_dns *header = (t_dns *)buf;
     uint16_t flag = ntohs(header->flags);
 #define QUERY_FLAG_MASK 0b1111101001010000
@@ -35,7 +35,7 @@ void handle_client_queries(t_worker *worker)
 #define QUERY_FLAG 0b1000000000000000
     if ((flag & QUERY_FLAG_MASK) != 0 || ntohs(header->qdcount) != 1)
     {
-        // devo inviare formerr
+        // Send FORMERR
         DNS_SET_FLAG(flag, DNS_FLAG_QR);
         DNS_CLR_FLAG(flag, DNS_FLAG_AA);
         DNS_CLR_FLAG(flag, DNS_FLAG_TC);
@@ -46,8 +46,8 @@ void handle_client_queries(t_worker *worker)
             perror("sendto");
     }
 
-    // adesso costruiamo la query che noi dobbiamo fare
-    // prendiamo un context libero
+    // Build the upstream query
+    // Allocate a free context
     t_query_context *context = ctx_pool_alloc(&worker->ctx_pool);
     if (context == NULL)
     {
@@ -59,7 +59,7 @@ void handle_client_queries(t_worker *worker)
         context->is_recursive = 1;
     else
         context->is_recursive = 0;
-    // prendiamo un id libero
+    // Allocate a free ID
     uint16_t id_from_pool;
     if (id_pool_alloc(&worker->id_pool, &id_from_pool))
     {
@@ -74,7 +74,7 @@ void handle_client_queries(t_worker *worker)
     ++pos;
     if (pos + 4 > byte_read)
     {
-        // deve mandare formerr
+        // Send FORMERR
         printf("ehehehehfweve\n");
         _exit(1);
     }
@@ -93,18 +93,18 @@ void handle_client_queries(t_worker *worker)
             ntohs(context->origin_addr.sin_port),
             ntohl(context->origin_addr.sin_addr.s_addr));
 
-    // ho riempito contex ora devo effettivamente inviare una richiesta all'upstream
-    // per fare una richiesa ho bisogno di:
+    // The context is ready; send the upstream request
+    // The request requires:
     /**
-     * -un ip a cui mandarla (con una porta standard)
-     * -un id univoco
-     * -le flag giuste (da capire)
-     * -encodato il nome
-     * -il qtype
-     * -il qname
-     * -il qclass
+     * - A destination IP address and standard port
+     * - A unique ID
+     * - The correct flags (still to be determined)
+     * - An encoded name
+     * - The QTYPE
+     * - The QNAME
+     * - The QCLASS
      *
-     * ad una funzione posso mandare il context
+     * Pass the context to a helper function
      */
     header->id = htons(id_from_pool);
     header->flags = UPSTREAM_FLAG;

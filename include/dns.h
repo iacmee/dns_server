@@ -25,7 +25,7 @@
 #include "logger.h"
 
 #define DNS_PORT 53
-#define MAX_EPOLL_EVENT (8192 / sizeof(struct epoll_event)) // 1024 richieste massime
+#define MAX_EPOLL_EVENT (8192 / sizeof(struct epoll_event)) // Maximum number of events per epoll batch
 #define QUERIES_BUFFER 4096UL                                 // 4 KB
 #define MINUMUM_HEADER_SIZE 12
 #define MAX_QNAME_LEN 256
@@ -52,18 +52,18 @@
 +--+---------+--+--+--+--+--------+-----------+
 */
 /**
- * QR: 1 bit per indicare se è una query o una response (1 è response)
- * OPCODE: il tipo di operazione
- * AA: solo nelle risposte è autoritativo per quella zona o no
- * TC: il messaggio è troncato o no
+ * QR: distinguishes a query from a response (1 means response)
+ * OPCODE: operation type
+ * AA: indicates whether a response is authoritative for the zone
+ * TC: indicates whether the message is truncated
  * RD: recursion desired
- * RA: recursion avaliable
- * Z: reseved, not in use
+ * RA: recursion available
+ * Z: reserved, not in use
  * RCODE: returned code (0) NOERROR
  */
 
 #define UPSTREAM_FLAG (0)
-// è una query, quindi
+// Query flags
 #define DNS_FLAG_QR 0x8000 /* bit 15 */
 #define DNS_FLAG_AA 0x0400 /* bit 10 */
 #define DNS_FLAG_TC 0x0200 /* bit 9  */
@@ -123,10 +123,10 @@ typedef struct s_dns
 {
     uint16_t id;
     uint16_t flags;
-    uint16_t qdcount; // numero di domande (valido solo quando invio)
-    uint16_t ancount; // numero di risposte vere (valido solo nelle risposte)
-    uint16_t nscount; // numero di risposte authority (valido solo nelle risposte) (a chi devo chiedere per avere la risposta)
-    uint16_t arcount; // numero di sezioni aggiuntive (valido solo nelle risposte oppure per impostazione nelle query)
+    uint16_t qdcount; // Number of questions
+    uint16_t ancount; // Number of answer records
+    uint16_t nscount; // Number of authority records (servers to contact for the answer)
+    uint16_t arcount; // Number of additional records in responses or queries
 } t_dns;
 
 typedef enum
@@ -160,10 +160,10 @@ typedef struct s_query_context
     uint8_t try;
     /* 2 byte padding */
 
-    /* puntatore usato nel caso debba risolvere un'altro dominio per quella query*/
+    /* Pointer used when resolving another domain for this query */
     struct s_query_context *query_ref;
 
-    // Puntatore a prossimo elemento in bucket hash
+    // Pointer to the next entry in the hash bucket
     struct ResolutionContext *next_hash;
 } t_query_context;
 
@@ -171,14 +171,14 @@ typedef struct s_ctx_poll
 {
     t_query_context ctx_arr[MAX_CTX];
     uint32_t free_stack[MAX_CTX];
-    uint32_t top; // numero di elementi nello stack
+    uint32_t top; // Number of entries in the stack
 } t_ctx_pool;
 
 typedef struct
 {
     t_query_context *id_arr[UINT16_MAX + 1u];
     uint16_t stack[UINT16_MAX + 1u];
-    uint32_t top; // numero di elementi disponibili
+    uint32_t top; // Number of available entries
 } t_id_pool;
 
 typedef struct s_worker
@@ -195,7 +195,7 @@ typedef struct s_worker
     uint8_t formerr_blueprint[FORMERR_BLUEPRINT_SIZE];
 } t_worker;
 
-// se voglio mandare più richieste in contemporanea modifico il contex
+// Extend the context to support multiple concurrent upstream requests
 // typedef struct {
 //   uint16_t id;
 //   sockaddr_storage ns_addr;

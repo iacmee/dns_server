@@ -37,7 +37,7 @@ void id_pool_init(t_id_pool *p)
 bool id_pool_alloc(t_id_pool *p, uint16_t *out)
 {
     if (p->top == 0)
-        return (true); // nessun ID libero
+        return (true); // No free IDs
     *out = p->stack[--p->top];
     return (false);
 }

@@ -39,7 +39,7 @@ size_t dns_write_qname(uint8_t *buf, const char *domain)
     size_t label_len_pos = 0;
     size_t label_len = 0;
 
-    buf[i++] = 0;               // placeholder lunghezza prima label
+    buf[i++] = 0;               // Placeholder for the first label length
     label_len_pos = 0;
 
     for (size_t d = 0; domain[d] != '\0'; d++)
@@ -48,7 +48,7 @@ size_t dns_write_qname(uint8_t *buf, const char *domain)
         {
             buf[label_len_pos] = (uint8_t)label_len;
             label_len_pos = i;
-            buf[i++] = 0;       // placeholder nuova label
+            buf[i++] = 0;       // Placeholder for the next label length
             label_len = 0;
         }
         else
@@ -59,7 +59,7 @@ size_t dns_write_qname(uint8_t *buf, const char *domain)
     }
 
     buf[label_len_pos] = (uint8_t)label_len;
-    buf[i++] = 0;               // terminatore QNAME
+    buf[i++] = 0;               // QNAME terminator
 
     return i;
 }

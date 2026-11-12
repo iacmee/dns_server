@@ -7,6 +7,6 @@ void handle_timer(t_worker *worker)
     if (read(worker->timerfd, &expirations, sizeof(expirations)) != sizeof(expirations))
         return;
 
-    // expirations = how many tick ar passed
+    // expirations is the number of elapsed ticks
     htw_advance(&worker->time_wheel, expirations);   
 }

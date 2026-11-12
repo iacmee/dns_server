@@ -1,11 +1,11 @@
-# Esperimenti
+# Experiments
 
-Bozze conservate per proseguire lo sviluppo. Questi sorgenti non fanno parte
-della build e possono essere incompleti, non compilabili o non sicuri da eseguire.
+Drafts preserved for further development. These sources are excluded from the
+build and may be incomplete, fail to compile, or be unsafe to run.
 
-- `iterative_response.c`: prima implementazione della risoluzione iterativa.
-- `client_queries_draft.c`, `parser_draft.c`: precedenti percorsi di parsing.
-- `query_client.c`, `sockaddr_size.c`: prove manuali originariamente nella root.
-- `thread_worker.c`, `time_helpers.c`: bozze per worker e gestione del tempo.
+- `iterative_response.c`: an early implementation of iterative resolution.
+- `client_queries_draft.c`, `parser_draft.c`: earlier query parsing paths.
+- `query_client.c`, `sockaddr_size.c`: manual experiments originally in the project root.
+- `thread_worker.c`, `time_helpers.c`: worker and time handling drafts.
 
-Il codice supportato per l'avvio è quello elencato esplicitamente nel Makefile.
+The supported runtime code is explicitly listed in the Makefile.

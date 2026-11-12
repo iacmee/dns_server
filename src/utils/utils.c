@@ -2,7 +2,7 @@
 
 int make_udp_socket_client(uint16_t port)
 {
-    int fd = socket(AF_INET, SOCK_DGRAM, 0); // IPv6 + v4-mapped, tipicamente
+    int fd = socket(AF_INET, SOCK_DGRAM, 0); // IPv4 UDP socket
     if (fd < 0)
     {
         perror("socket");
@@ -76,7 +76,7 @@ bool dns_read_name(const uint8_t *msg, size_t msg_len, ssize_t *offset,
             if (--jumps_left == 0)
                 return (false);
 
-            pos = ptr; // segui il puntatore per espandere
+            pos = ptr; // Follow the pointer to expand the name
             continue;
         }
 
@@ -109,7 +109,7 @@ bool dns_read_name(const uint8_t *msg, size_t msg_len, ssize_t *offset,
     if (!jumped)
         *offset = pos + 1;
 
-    // root name => empty string (o "." se preferisci)
+    // root name => empty string (or "." if preferred)
     if (out_pos >= out_len)
         return (false);
     out[out_pos] = '\0';

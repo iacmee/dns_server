@@ -23,9 +23,9 @@
 #define HTW_MASK (HTW_SIZE - 1u)
 
 /**
- * if this asserction fail we coud simply redefine the struct htw_timer,
- * int particulare slot and levels camp shoud not be > 8 bit.
- * note that could be increase pre allocated memory and introduce padding
+ * If these assertions fail, redefine struct htw_timer.
+ * The slot and level fields currently use 8 bits each.
+ * Larger fields may increase preallocated memory usage and introduce padding.
  */
 _Static_assert(HTW_LEVELS <= 256, "in htw_timer level is an 8 bit unsigned integer, can not have more then 256 levels");
 _Static_assert(HTW_SIZE <= 256, "in htw_timer slot is an 8 bit unsigned integer, can not have more then 256 slot");
@@ -35,7 +35,7 @@ _Static_assert(HTW_SIZE >= 2, "HTW_SIZE must be >= 2");
 
 _Static_assert((HTW_SIZE != 256u) || (HTW_MASK != 0xFFu) || (HTW_LEVELS < 8), "htw_slot_for function optimization required");
 
-typedef void (*t_htw_cb)(void *arg); // 48 byte for no
+typedef void (*t_htw_cb)(void *arg); // Timer callback
 
 typedef struct htw_timer
 {
